@@ -1,300 +1,104 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Murder Report - первичный анализ исходных данных по номерам телефонов">
-    <meta name="keywords" content="номер телефона, анализ, lookup, данные">
-    <meta name="author" content="runethack">
-    <title>Murder Report - Поиск и анализ номеров</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-        
-        .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
-        }
-        
-        .search-box {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        input[type="text"] {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        button {
-            padding: 12px 30px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        button:hover {
-            background: #764ba2;
-        }
-        
-        button:active {
-            transform: scale(0.98);
-        }
-        
-        .result {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 5px;
-            display: none;
-        }
-        
-        .result.show {
-            display: block;
-        }
-        
-        .result-title {
-            color: #333;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        
-        .result-content {
-            color: #666;
-            font-size: 14px;
-            line-height: 1.6;
-            word-break: break-all;
-        }
-        
-        .error {
-            color: #d32f2f;
-            margin-top: 20px;
-            padding: 15px;
-            background: #ffebee;
-            border-radius: 5px;
-            display: none;
-        }
-        
-        .error.show {
-            display: block;
-        }
-        
-        .loading {
-            text-align: center;
-            color: #667eea;
-            display: none;
-        }
-        
-        .loading.show {
-            display: block;
-        }
-        
-        .info {
-            margin-top: 20px;
-            padding: 15px;
-            background: #e3f2fd;
-            border-left: 4px solid #667eea;
-            border-radius: 3px;
-            font-size: 13px;
-            color: #1976d2;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔍 Murder Report</h1>
-        <p class="subtitle">Анализ исходных данных по номерам телефонов</p>
-        
-        <div class="search-box">
-            <input 
-                type="text" 
-                id="numberInput" 
-                placeholder="Введите номер телефона (без пробелов и символов)"
-                maxlength="20"
-            >
-            <button onclick="searchNumber()">Поиск</button>
-        </div>
-        
-        <div class="loading" id="loading">
-            <p>⏳ Идет поиск данных...</p>
-        </div>
-        
-        <div class="result" id="result">
-            <div class="result-title" id="resultTitle"></div>
-            <div class="result-content" id="resultContent"></div>
-        </div>
-        
-        <div class="error" id="error"></div>
-        
-        <div class="info">
-            ℹ️ Используется API для получения информации о номере телефона. 
-            Введите номер в международном формате или только цифры.
-        </div>
-    </div>
-    
-    <script>
-        const API_URL = "https://num.voxlink.ru/get/v2/?num=";
-        
-        function cleanNumber(num) {
-            // Убираем все нецифровые символы
-            return num.replace(/\D/g, '');
-        }
-        
-        function searchNumber() {
-            const input = document.getElementById('numberInput');
-            const number = cleanNumber(input.value);
-            
-            if (!number) {
-                showError('Пожалуйста, введите номер телефона');
-                return;
-            }
-            
-            if (number.length < 7) {
-                showError('Номер телефона должен содержать минимум 7 цифр');
-                return;
-            }
-            
-            fetchNumberInfo(number);
-        }
-        
-        function fetchNumberInfo(number) {
-            const loading = document.getElementById('loading');
-            const result = document.getElementById('result');
-            const error = document.getElementById('error');
-            
-            result.classList.remove('show');
-            error.classList.remove('show');
-            loading.classList.add('show');
-            
-            fetch(API_URL + encodeURIComponent(number))
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Ошибка при получении данных');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    loading.classList.remove('show');
-                    displayResult(data, number);
-                })
-                .catch(err => {
-                    loading.classList.remove('show');
-                    showError('Ошибка при запросе к API: ' + err.message);
-                });
-        }
-        
-        function displayResult(data, number) {
-            const result = document.getElementById('result');
-            const resultTitle = document.getElementById('resultTitle');
-            const resultContent = document.getElementById('resultContent');
-            const error = document.getElementById('error');
-            
-            error.classList.remove('show');
-            
-            if (data && typeof data === 'object') {
-                resultTitle.textContent = '✅ Результаты для номера: ' + number;
-                
-                let content = '<table style="width: 100%; border-collapse: collapse;">';
-                for (let key in data) {
-                    if (data.hasOwnProperty(key)) {
-                        // Пропускаем отзывы и полную информацию
-                        if (key.toLowerCase().includes('review') || 
-                            key.toLowerCase().includes('отзыв') ||
-                            key.toLowerCase().includes('reviews') ||
-                            key.toLowerCase().includes('full') ||
-                            key.toLowerCase().includes('полн')) {
-                            continue;
-                        }
-                        
-                        const value = data[key];
-                        const displayValue = typeof value === 'object' ? 
-                            JSON.stringify(value, null, 2) : 
-                            String(value);
-                        
-                        content += `<tr style="border-bottom: 1px solid #ddd;">
-                            <td style="padding: 8px; font-weight: bold; width: 30%; color: #667eea;">${key}</td>
-                            <td style="padding: 8px; color: #666;">${escapeHtml(displayValue)}</td>
-                        </tr>`;
-                    }
-                }
-                content += '</table>';
-                
-                resultContent.innerHTML = content;
-            } else {
-                resultTitle.textContent = 'ℹ️ Информация';
-                resultContent.innerHTML = 'Данные для этого номера не найдены в базе.';
-            }
-            
-            result.classList.add('show');
-        }
-        
-        function showError(message) {
-            const error = document.getElementById('error');
-            const result = document.getElementById('result');
-            const loading = document.getElementById('loading');
-            
-            error.textContent = '❌ ' + message;
-            error.classList.add('show');
-            result.classList.remove('show');
-            loading.classList.remove('show');
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        // Enter для поиска
-        document.getElementById('numberInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                searchNumber();
-            }
-        });
-    </script>
-</body>
-</html>
+# MURDER Report
+
+MURDER Report — это Python-инструмент для первичного OSINT-анализа открытых данных:
+- username
+- домены
+- email
+- номера телефонов
+- IP-адреса
+- изображения (EXIF/GPS)
+
+Он предназначен для образовательных целей, тестовых сред и анализа систем, на которые у вас есть явное разрешение.
+
+## Что умеет
+- Проверка username на популярных платформах
+- Анализ домена: DNS, WHOIS, RDAP, субдомены, path brute
+- Анализ email: синтаксис, MX, disposable, Gravatar, утечки
+- Анализ телефона: нормализация, страна, оператор, WhatsApp, отзывы
+- Анализ IP: geo, Whois, reverse DNS
+- Анализ изображений: EXIF, GPS, ссылки на обратный поиск
+- Генерация возможных email по username
+- Генерация JSON/HTML-отчётов
+
+## Установка
+
+```bash
+git clone https://github.com/runethack/murder-report.git
+cd murder-report
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Запуск
+
+### Интерактивный режим
+```bash
+python3 main.py
+```
+
+### Командная строка
+```bash
+# username
+python3 main.py -u someuser
+
+# домен
+python3 main.py -d example.com
+
+# email
+python3 main.py -e user@example.com
+
+# телефона
+python3 main.py -p +79001234567
+
+# IP
+python3 main.py -i 8.8.8.8
+
+# изображение
+python3 main.py --image /path/to/file.jpg
+
+# генерация email из username
+python3 main.py --emails someuser
+python3 main.py --emails someuser --emails-domain gmail.com,proton.me
+```
+
+## Агрессивная проверка
+Некоторые режимы создают много HTTP-запросов и могут быть заблокированы:
+- brute-force путей
+- crawl robots/sitemap
+- authbrute
+- проверка множества сайтов с отзывами
+- nmap / subfinder / whatweb / wafw00f / httpx / nuclei
+
+Используйте их только на системах, которыми вы владеете, или с явного разрешения владельца.
+
+## Отчёты
+Каждый запуск сохраняет JSON и HTML-файл, например:
+```bash
+python3 main.py -d example.com -o report
+```
+Создаст:
+- report.json
+- report.html
+
+## Лицензия
+MIT License. См. файл `LICENSE`.
+
+## Важно
+Используйте проект только для:
+- собственных систем
+- тестовых сред
+- проектов, на которые есть разрешение
+- образовательных задач
+
+Использовать в незаконных или несанкционированных целях запрещено.
+
+## Источник данных для телефона
+В веб-версии номера используется источник:
+```javascript
+const API_URL = "https://num.voxlink.ru/get/v2/?num=";
+```
+или, в Python-стиле:
+```python
+url = f"https://num.voxlink.ru/get/v2/?num={num}"
+```
