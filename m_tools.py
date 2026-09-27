@@ -25,6 +25,32 @@ except ImportError:
     HAS_BS4 = False
 
 
+class PhoneReviewResults(list):
+    """List-like container for phone reviews with source metadata."""
+
+    def __init__(self, items=None, source_url=None):
+        super().__init__(items or [])
+        self.source_url = source_url
+
+    def __getitem__(self, item):
+        if isinstance(item, str):
+            if item == 'source_url':
+                return self.source_url
+            if item == 'results':
+                return list(self)
+            raise KeyError(item)
+        return super().__getitem__(item)
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except Exception:
+            return default
+
+    def to_dict(self):
+        return {'source_url': self.source_url, 'results': list(self)}
+
+
 USERNAME_SITES = {
     "github": ("https://github.com/{}", ["Not Found"]),
     "gitlab": ("https://gitlab.com/{}", ["Page Not Found", "404"]),
@@ -525,7 +551,7 @@ def email_breach(email):
         return {"checked": False}
     low = r.text.lower()
     breached = "good news" not in low and "oh no" in low
-    names = re.findall(r'class="[^"]*pwned-account[^"]*"[^>]*>([^<]+)<', r.text)
+    names = re.findall(r'class="[^"]*pwned-account[^"]*">([^<]+)<', r.text)
     return {"checked": True, "breached": breached, "brands": names[:30],
             "cloudflare": is_cloudflare(r.text or '', r.headers)}
 
@@ -702,19 +728,16 @@ def whatsapp_check(raw_phone, timeout=12):
     if m:
         out['title'] = m.group(1).strip()
 
-    # 1) редирект на "не установлен WhatsApp / invalid"
     if 'whatsapp.com/download' in final or 'invalid' in final:
         out['registered'] = False
         out['method'] = 'redirect_invalid'
         return out
 
-    # 2) редирект на send — есть номер
     if 'api.whatsapp.com/send' in final or 'web.whatsapp.com/send' in final:
         out['registered'] = True
         out['method'] = 'redirect_send'
         return out
 
-    # 3) HTML-маркеры "недействительный номер" (мультиязычные)
     invalid_markers = [
         'phone number shared via url is invalid',
         'номер телефона, указанный в ссылке, недействителен',
@@ -729,7 +752,6 @@ def whatsapp_check(raw_phone, timeout=12):
         out['method'] = 'html_invalid'
         return out
 
-    # 4) HTML-маркеры "зарегистрирован" (чат + WhatsApp Web / download app)
     valid_markers = [
         'continue to chat',
         'use whatsapp web',
@@ -747,8 +769,6 @@ def whatsapp_check(raw_phone, timeout=12):
         out['method'] = 'html_chat'
         return out
 
-    # 5) если страница скачивания с текстом "you don't have whatsapp" — считаем,
-    #    что номер тоже не зарегистрирован (WhatsApp не знает, что с ним делать)
     if 'download whatsapp' in body_low and 'continue' not in body_low:
         out['registered'] = False
         out['method'] = 'html_download_only'
@@ -762,8 +782,9 @@ def whatsapp_check(raw_phone, timeout=12):
 def phone_reviews(raw_phone, total_timeout=25):
     digits = re.sub(r'\D', '', raw_phone)
     if not digits:
-        return []
+        return PhoneReviewResults(source_url='https://num.voxlink.ru/get/v2/?num=')
 
+    source_url = f"https://num.voxlink.ru/get/v2/?num={digits}"
     digits_variants = {digits}
     if digits.startswith('7') and len(digits) == 11:
         digits_variants.add('8' + digits[1:])
@@ -968,8 +989,15 @@ def phone_reviews(raw_phone, total_timeout=25):
         if x.get('cloudflare'): score += 100
         if x.get('error'): score += 200
         return score
+
+    results = [r for r in results if not (
+        isinstance(r.get('error'), str) and any(token in r['error'].lower() for token in ('http_404', 'http_403', 'network'))
+    )]
     results.sort(key=rank)
-    return results
+    return PhoneReviewResults(results, source_url=source_url)
+
+
+ip_geo = None
 
 
 def ip_geo(ip):
@@ -1084,8 +1112,8 @@ def image_exif(path):
             lon = tags.get("GPS GPSLongitude")
             lon_ref = tags.get("GPS GPSLongitudeRef")
             if lat and lat_ref and lon and lon_ref:
-                lat_vals = [float(x.num) / float(x.den) for x in lat.values]
-                lon_vals = [float(x.num) / float(x.den) for x in lon.values]
+                lat_vals = [float(x.num) / float(x.den) for x in lat.values()]
+                lon_vals = [float(x.num) / float(x.den) for x in lon.values()]
                 lat_deg = _gps_to_deg(lat_vals, str(lat_ref))
                 lon_deg = _gps_to_deg(lon_vals, str(lon_ref))
                 out["gps"] = {"lat": lat_deg, "lon": lon_deg,
