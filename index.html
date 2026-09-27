@@ -1,104 +1,63 @@
-# MURDER Report
-
-MURDER Report — это Python-инструмент для первичного OSINT-анализа открытых данных:
-- username
-- домены
-- email
-- номера телефонов
-- IP-адреса
-- изображения (EXIF/GPS)
-
-Он предназначен для образовательных целей, тестовых сред и анализа систем, на которые у вас есть явное разрешение.
-
-## Что умеет
-- Проверка username на популярных платформах
-- Анализ домена: DNS, WHOIS, RDAP, субдомены, path brute
-- Анализ email: синтаксис, MX, disposable, Gravatar, утечки
-- Анализ телефона: нормализация, страна, оператор, WhatsApp, отзывы
-- Анализ IP: geo, Whois, reverse DNS
-- Анализ изображений: EXIF, GPS, ссылки на обратный поиск
-- Генерация возможных email по username
-- Генерация JSON/HTML-отчётов
-
-## Установка
-
-```bash
-git clone https://github.com/runethack/murder-report.git
-cd murder-report
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Запуск
-
-### Интерактивный режим
-```bash
-python3 main.py
-```
-
-### Командная строка
-```bash
-# username
-python3 main.py -u someuser
-
-# домен
-python3 main.py -d example.com
-
-# email
-python3 main.py -e user@example.com
-
-# телефона
-python3 main.py -p +79001234567
-
-# IP
-python3 main.py -i 8.8.8.8
-
-# изображение
-python3 main.py --image /path/to/file.jpg
-
-# генерация email из username
-python3 main.py --emails someuser
-python3 main.py --emails someuser --emails-domain gmail.com,proton.me
-```
-
-## Агрессивная проверка
-Некоторые режимы создают много HTTP-запросов и могут быть заблокированы:
-- brute-force путей
-- crawl robots/sitemap
-- authbrute
-- проверка множества сайтов с отзывами
-- nmap / subfinder / whatweb / wafw00f / httpx / nuclei
-
-Используйте их только на системах, которыми вы владеете, или с явного разрешения владельца.
-
-## Отчёты
-Каждый запуск сохраняет JSON и HTML-файл, например:
-```bash
-python3 main.py -d example.com -o report
-```
-Создаст:
-- report.json
-- report.html
-
-## Лицензия
-MIT License. См. файл `LICENSE`.
-
-## Важно
-Используйте проект только для:
-- собственных систем
-- тестовых сред
-- проектов, на которые есть разрешение
-- образовательных задач
-
-Использовать в незаконных или несанкционированных целях запрещено.
-
-## Источник данных для телефона
-В веб-версии номера используется источник:
-```javascript
-const API_URL = "https://num.voxlink.ru/get/v2/?num=";
-```
-или, в Python-стиле:
-```python
-url = f"https://num.voxlink.ru/get/v2/?num={num}"
-```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Murder Report — анализ телефонного номера">
+  <title>Murder Report — поиск номера</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; font-family: system-ui, sans-serif; background: linear-gradient(135deg,#667eea,#764ba2); }
+    .container { width: min(680px,100%); padding: 32px; background: #fff; border-radius: 12px; box-shadow: 0 20px 60px #0004; }
+    h1, .subtitle { text-align: center; } .subtitle { color: #666; }
+    .search-box { display: flex; gap: 10px; margin: 28px 0 18px; }
+    input { min-width: 0; flex: 1; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 6px; }
+    button { padding: 12px 24px; color: white; background: #667eea; border: 0; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #764ba2; }
+    #loading, #result, #error { display: none; } #loading.show, #result.show, #error.show { display: block; }
+    #result { margin-top: 20px; padding: 16px; overflow-x: auto; background: #f8f9fa; border-radius: 6px; }
+    #error { margin-top: 16px; padding: 12px; color: #a00; background: #ffebee; border-radius: 6px; }
+    .info { margin-top: 18px; padding: 12px; color: #1769aa; background: #e3f2fd; border-left: 4px solid #667eea; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; } td { padding: 8px; border-bottom: 1px solid #ddd; vertical-align: top; word-break: break-word; } td:first-child { width: 30%; color: #667eea; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>🔍 Murder Report</h1>
+    <p class="subtitle">Анализ открытых данных по номеру телефона</p>
+    <div class="search-box">
+      <input id="numberInput" type="text" maxlength="20" placeholder="Введите номер телефона">
+      <button id="searchButton" type="button">Поиск</button>
+    </div>
+    <div id="loading">⏳ Идёт поиск данных...</div>
+    <div id="result"><strong id="resultTitle"></strong><div id="resultContent"></div></div>
+    <div id="error"></div>
+    <div class="info">Источник: <code>https://num.voxlink.ru/get/v2/?num={num}</code>. API является сторонним сервисом.</div>
+  </main>
+  <script>
+    const API_URL = "https://num.voxlink.ru/get/v2/?num=";
+    const $ = id => document.getElementById(id);
+    function cleanNumber(value) { return value.replace(/\D/g, ''); }
+    function escapeHtml(value) { const div = document.createElement('div'); div.textContent = String(value); return div.innerHTML; }
+    function showError(message) { $('error').textContent = '❌ ' + message; $('error').classList.add('show'); $('result').classList.remove('show'); $('loading').classList.remove('show'); }
+    async function searchNumber() {
+      const number = cleanNumber($('numberInput').value);
+      if (!number) return showError('Введите номер телефона');
+      if (number.length < 7) return showError('Номер должен содержать минимум 7 цифр');
+      $('loading').classList.add('show'); $('error').classList.remove('show'); $('result').classList.remove('show');
+      try {
+        const response = await fetch(API_URL + encodeURIComponent(number));
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        const rows = Object.entries(data && typeof data === 'object' ? data : {}).map(([key, value]) => `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2) : value)}</td></tr>`).join('');
+        $('resultTitle').textContent = '✅ Результаты для номера: ' + number;
+        $('resultContent').innerHTML = rows ? `<table>${rows}</table>` : 'Данные не найдены.';
+        $('result').classList.add('show');
+      } catch (error) { showError('Ошибка запроса к API: ' + error.message); }
+      finally { $('loading').classList.remove('show'); }
+    }
+    $('searchButton').addEventListener('click', searchNumber);
+    $('numberInput').addEventListener('keydown', event => { if (event.key === 'Enter') searchNumber(); });
+  </script>
+</body>
+</html>
